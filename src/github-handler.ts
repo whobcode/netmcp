@@ -53,8 +53,8 @@ app.post("/authorize", async (c) => {
 		// Read form data once
 		const formData = await c.req.raw.formData();
 
-		// Validate CSRF token
-		validateCSRFToken(formData, c.req.raw);
+		// Validate CSRF token (returns cookie to clear for one-time use)
+		const { clearCookie: csrfClearCookie } = validateCSRFToken(formData, c.req.raw);
 
 		// Extract state from form data
 		const encodedState = formData.get("state");
@@ -84,8 +84,9 @@ app.post("/authorize", async (c) => {
 		const { stateToken } = await createOAuthState(state.oauthReqInfo, c.env.OAUTH_KV);
 		const { setCookie: sessionBindingCookie } = await bindStateToSession(stateToken);
 
-		// Set both cookies: approved client list + session binding
+		// Set all cookies: CSRF clear + approved client list + session binding
 		const headers = new Headers();
+		headers.append("Set-Cookie", csrfClearCookie);
 		headers.append("Set-Cookie", approvedClientCookie);
 		headers.append("Set-Cookie", sessionBindingCookie);
 
@@ -95,8 +96,8 @@ app.post("/authorize", async (c) => {
 		if (error instanceof OAuthError) {
 			return error.toResponse();
 		}
-		// Unexpected non-OAuth error
-		return c.text(`Internal server error: ${error.message}`, 500);
+		// Unexpected non-OAuth error - don't leak internal details
+		return c.text("Internal server error", 500);
 	}
 });
 
@@ -172,17 +173,23 @@ app.get("/callback", async (c) => {
 	const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
 	const { login, name, email } = user.data;
 
+	// Validate required fields (email can be null if user has private email settings)
+	if (!login) {
+		return c.text("Failed to retrieve GitHub user login", 500);
+	}
+
 	// Return back to the MCP client a new token
 	const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
 		metadata: {
-			label: name,
+			label: name ?? login,
 		},
 		// This will be available on this.props inside MyMCP
+		// Note: email and name can be null if user has private settings
 		props: {
 			accessToken,
-			email,
+			email: email ?? "",
 			login,
-			name,
+			name: name ?? login,
 		} as Props,
 		request: oauthReqInfo,
 		scope: oauthReqInfo.scope,

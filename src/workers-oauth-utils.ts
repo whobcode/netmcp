@@ -232,7 +232,7 @@ export function validateCSRFToken(formData: FormData, request: Request): Validat
 		throw new OAuthError("invalid_request", "Missing CSRF token cookie", 400);
 	}
 
-	if (tokenFromForm !== tokenFromCookie) {
+	if (!constantTimeEqual(tokenFromForm, tokenFromCookie)) {
 		throw new OAuthError("invalid_request", "CSRF token mismatch", 400);
 	}
 
@@ -350,7 +350,7 @@ export async function validateOAuthState(
 	const hashArray = Array.from(new Uint8Array(hashBuffer));
 	const stateHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-	if (stateHash !== consentedStateHash) {
+	if (!constantTimeEqual(stateHash, consentedStateHash)) {
 		throw new OAuthError(
 			"invalid_request",
 			"State token does not match session - possible CSRF attack detected",
@@ -787,6 +787,21 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
 
 // --- Helper Functions ---
 
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Returns true if strings are equal, false otherwise.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) {
+		return false;
+	}
+	let result = 0;
+	for (let i = 0; i < a.length; i++) {
+		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return result === 0;
+}
+
 async function getApprovedClientsFromCookie(
 	request: Request,
 	cookieSecret: string,
@@ -807,7 +822,13 @@ async function getApprovedClientsFromCookie(
 	if (parts.length !== 2) return null;
 
 	const [signatureHex, base64Payload] = parts;
-	const payload = atob(base64Payload);
+
+	let payload: string;
+	try {
+		payload = atob(base64Payload);
+	} catch (_e) {
+		return null; // Invalid base64
+	}
 
 	const isValid = await verifySignature(signatureHex, payload, cookieSecret);
 

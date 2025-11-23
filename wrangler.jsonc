@@ -17,11 +17,20 @@
 	/**
 		 * Note: Use secrets to store sensitive data.
 		 * https://developers.cloudflare.com/workers/configuration/secrets/
-		 * 
+		 *
 		 * Commands to set secrets:
 		 * npx wrangler secret put GITHUB_CLIENT_ID
 		 * npx wrangler secret put GITHUB_CLIENT_SECRET
 		 * npx wrangler secret put COOKIE_ENCRYPTION_KEY
+		 *
+		 * Optional secrets for external API tools:
+		 * npx wrangler secret put NVD_API_KEY          # NIST NVD API (optional, increases rate limit)
+		 * npx wrangler secret put GITHUB_TOKEN         # GitHub API token for exploit search
+		 * npx wrangler secret put GITLAB_TOKEN         # GitLab API token (optional)
+		 * npx wrangler secret put SHODAN_API_KEY       # Shodan API (100 free queries/month)
+		 * npx wrangler secret put CENSYS_API_ID        # Censys API credentials
+		 * npx wrangler secret put CENSYS_API_SECRET    # Censys API credentials
+		 * npx wrangler secret put SECURITYTRAILS_API_KEY # SecurityTrails (50 free queries/month)
 		 */
 	"migrations": [
 		{
@@ -42,7 +51,8 @@
 	"kv_namespaces": [
 		{
 			"binding": "OAUTH_KV",
-			"id": "<Add-KV-ID>"
+			"id": "ded481159679459b8fcc0151ad178688",
+			"remote": true
 		}
 	],
 	"ai": {

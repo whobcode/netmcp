@@ -1,147 +1,103 @@
-# Model Context Protocol (MCP) Server + Github OAuth
+# Security Research MCP Server
 
-This is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that supports remote MCP connections, with Github OAuth built-in.
+A Model Context Protocol (MCP) server providing security research, OSINT, and vulnerability intelligence tools. Authenticated via GitHub OAuth.
 
-You can deploy it to your own Cloudflare account, and after you create your own Github OAuth client app, you'll have a fully functional remote MCP server that you can build off. Users will be able to connect to your MCP server by signing in with their GitHub account.
+**Server URL:** `https://my-mcp-server-github-auth.tru-bone.workers.dev`
 
-You can use this as a reference example for how to integrate other OAuth providers with an MCP server deployed to Cloudflare, using the [`workers-oauth-provider` library](https://github.com/cloudflare/workers-oauth-provider).
+## Tools
 
-The MCP server (powered by [Cloudflare Workers](https://developers.cloudflare.com/workers/)):
+### Vulnerability Intelligence
 
-* Acts as OAuth _Server_ to your MCP clients
-* Acts as OAuth _Client_ to your _real_ OAuth server (in this case, GitHub)
+| Tool | Description | Auth Required |
+|------|-------------|---------------|
+| `nvd_cve_lookup` | Search NIST National Vulnerability Database for CVE details, CVSS scores, and remediation info | Optional (increases rate limit) |
+| `osv_vulnerability_scan` | Scan open source packages for known vulnerabilities using the OSV database | None |
 
-> [!WARNING]
-> This is a demo template designed to help you get started quickly. While we have implemented several security controls, **you must implement all preventive and defense-in-depth security measures before deploying to production**. Please review our comprehensive security guide: [Securing MCP Servers](https://github.com/cloudflare/agents/blob/main/docs/securing-mcp-servers.md)
+### Exploit Database
 
-## Getting Started
+| Tool | Description |
+|------|-------------|
+| `exploitdb_search` | Search 47,987 exploits by keyword, CVE, platform, or type |
+| `exploitdb_get` | Get detailed exploit information by ExploitDB ID |
+| `exploitdb_info` | Get dataset metadata and statistics |
 
-Clone the repo directly & install dependencies: `npm install`.
+### Code Search
 
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
-```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-github-oauth
-```
+| Tool | Description | Auth Required |
+|------|-------------|---------------|
+| `github_exploit_search` | Search GitHub for exploit code, PoCs, and security tools | GITHUB_TOKEN |
+| `gitlab_code_search` | Search GitLab for code in public projects | Optional |
 
-### For Production
-Create a new [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app): 
-- For the Homepage URL, specify `https://mcp-github-oauth.<your-subdomain>.workers.dev`
-- For the Authorization callback URL, specify `https://mcp-github-oauth.<your-subdomain>.workers.dev/callback`
-- Note your Client ID and generate a Client secret. 
-- Set secrets via Wrangler
-```bash
-wrangler secret put GITHUB_CLIENT_ID
-wrangler secret put GITHUB_CLIENT_SECRET
-wrangler secret put COOKIE_ENCRYPTION_KEY # add any random string here e.g. openssl rand -hex 32
-```
+### Internet Intelligence
 
-> [!IMPORTANT]
-> When you create the first secret, Wrangler will ask if you want to create a new Worker. Submit "Y" to create a new Worker and save the secret.
+| Tool | Description | Auth Required |
+|------|-------------|---------------|
+| `shodan_device_search` | Search Shodan for Internet-connected devices and exposed services | SHODAN_API_KEY |
+| `censys_host_search` | Search Censys for host information, certificates, and services | CENSYS_API_ID + SECRET |
+| `securitytrails_dns_history` | Query historical DNS records and domain intelligence | SECURITYTRAILS_API_KEY |
+| `ipwhois_enrichment` | Get geolocation, ASN, and WHOIS data for any IP address | None |
+| `wayback_machine_lookup` | Search Internet Archive for historical website snapshots | None |
 
-#### Set up a KV namespace
-- Create the KV namespace: 
-`wrangler kv namespace create "OAUTH_KV"`
-- Update the Wrangler file with the KV ID
+### Utility
 
-#### Deploy & Test
-Deploy the MCP server to make it available on your workers.dev domain 
-` wrangler deploy`
+| Tool | Description |
+|------|-------------|
+| `add` | Add two numbers |
+| `userInfoOctokit` | Get authenticated GitHub user info |
+| `generateImage` | Generate images with Flux AI (restricted access) |
 
-Test the remote server using [Inspector](https://modelcontextprotocol.io/docs/tools/inspector): 
+## Connecting to the Server
 
-```
-npx @modelcontextprotocol/inspector@latest
-```
-Enter `https://mcp-github-oauth.<your-subdomain>.workers.dev/sse` and hit connect. Once you go through the authentication flow, you'll see the Tools working: 
+### Claude Desktop
 
-<img width="640" alt="image" src="https://github.com/user-attachments/assets/7973f392-0a9d-4712-b679-6dd23f824287" />
+Open **Settings → Developer → Edit Config** and add:
 
-You now have a remote MCP server deployed! 
-
-### Access Control
-
-This MCP server uses GitHub OAuth for authentication. All authenticated GitHub users can access basic tools like "add" and "userInfoOctokit".
-
-The "generateImage" tool is restricted to specific GitHub users listed in the `ALLOWED_USERNAMES` configuration:
-
-```typescript
-// Add GitHub usernames for image generation access
-const ALLOWED_USERNAMES = new Set([
-  'yourusername',
-  'teammate1'
-]);
-```
-
-### Access the remote MCP server from Claude Desktop
-
-Open Claude Desktop and navigate to Settings -> Developer -> Edit Config. This opens the configuration file that controls which MCP servers Claude can access.
-
-Replace the content with the following configuration. Once you restart Claude Desktop, a browser window will open showing your OAuth login page. Complete the authentication flow to grant Claude access to your MCP server. After you grant access, the tools will become available for you to use. 
-
-```
+```json
 {
   "mcpServers": {
-    "math": {
+    "security-research": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://mcp-github-oauth.<your-subdomain>.workers.dev/sse"
+        "https://my-mcp-server-github-auth.tru-bone.workers.dev/sse"
       ]
     }
   }
 }
 ```
 
-Once the Tools (under 🔨) show up in the interface, you can ask Claude to use them. For example: "Could you use the math tool to add 23 and 19?". Claude should invoke the tool and show the result generated by the MCP server.
+Restart Claude Desktop. A browser window will open for GitHub OAuth authentication.
 
-### For Local Development
-If you'd like to iterate and test your MCP server, you can do so in local development. This will require you to create another OAuth App on GitHub: 
-- For the Homepage URL, specify `http://localhost:8788`
-- For the Authorization callback URL, specify `http://localhost:8788/callback`
-- Note your Client ID and generate a Client secret. 
-- Create a `.dev.vars` file in your project root with: 
+### Cursor
+
+Choose **Type**: "Command" and enter:
+
 ```
-GITHUB_CLIENT_ID=your_development_github_client_id
-GITHUB_CLIENT_SECRET=your_development_github_client_secret
+npx mcp-remote https://my-mcp-server-github-auth.tru-bone.workers.dev/sse
 ```
 
-#### Develop & Test
-Run the server locally to make it available at `http://localhost:8788`
-`wrangler dev`
+### Other MCP Clients
 
-To test the local server, enter `http://localhost:8788/sse` into Inspector and hit connect. Once you follow the prompts, you'll be able to "List Tools". 
+Add the same JSON configuration to your client's config file and restart.
 
-#### Using Claude and other MCP Clients
+### MCP Inspector
 
-When using Claude to connect to your remote MCP server, you may see some error messages. This is because Claude Desktop doesn't yet support remote MCP servers, so it sometimes gets confused. To verify whether the MCP server is connected, hover over the 🔨 icon in the bottom right corner of Claude's interface. You should see your tools available there.
+Test the server directly:
 
-#### Using Cursor and other MCP Clients
+```bash
+npx @modelcontextprotocol/inspector@latest
+```
 
-To connect Cursor with your MCP server, choose `Type`: "Command" and in the `Command` field, combine the command and args fields into one (e.g. `npx mcp-remote https://<your-worker-name>.<your-subdomain>.workers.dev/sse`).
+Enter `https://my-mcp-server-github-auth.tru-bone.workers.dev/sse` and connect.
 
-Note that while Cursor supports HTTP+SSE servers, it doesn't support authentication, so you still need to use `mcp-remote` (and to use a STDIO server, not an HTTP one).
+## Example Usage
 
-You can connect your MCP server to other MCP clients like Windsurf by opening the client's configuration file, adding the same JSON that was used for the Claude setup, and restarting the MCP client.
+Once connected, you can ask your AI assistant:
 
-## How does it work? 
-
-#### OAuth Provider
-The OAuth Provider library serves as a complete OAuth 2.1 server implementation for Cloudflare Workers. It handles the complexities of the OAuth flow, including token issuance, validation, and management. In this project, it plays the dual role of:
-
-- Authenticating MCP clients that connect to your server
-- Managing the connection to GitHub's OAuth services
-- Securely storing tokens and authentication state in KV storage
-
-#### Durable MCP
-Durable MCP extends the base MCP functionality with Cloudflare's Durable Objects, providing:
-- Persistent state management for your MCP server
-- Secure storage of authentication context between requests
-- Access to authenticated user information via `this.props`
-- Support for conditional tool availability based on user identity
-
-#### MCP Remote
-The MCP Remote library enables your server to expose tools that can be invoked by MCP clients like the Inspector. It:
-- Defines the protocol for communication between clients and your server
-- Provides a structured way to define tools
-- Handles serialization and deserialization of requests and responses
-- Maintains the Server-Sent Events (SSE) connection between clients and your server
+- "Search for CVE-2024-1234 in the NVD database"
+- "Check if lodash 4.17.20 has any known vulnerabilities"
+- "Search ExploitDB for Apache Struts exploits"
+- "Look up the IP 8.8.8.8"
+- "Find historical DNS records for example.com"
+- "Search GitHub for Log4j proof of concept code"
+- "Check Wayback Machine for archived versions of example.com"

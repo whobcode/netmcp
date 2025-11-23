@@ -4,19 +4,15 @@ import { McpAgent } from "agents/mcp";
 import { Octokit } from "octokit";
 import { z } from "zod";
 import { GitHubHandler } from "./github-handler";
-
-// Context from the auth process, encrypted & stored in the auth token
-// and provided to the DurableMCP as this.props
-type Props = {
-	login: string;
-	name: string;
-	email: string;
-	accessToken: string;
-};
+import type { Props } from "./utils";
+import { registerExternalApiTools } from "./external-api-tools";
+import { registerExploitDbTools, loadDataset, isDatasetLoaded } from "./exploitdb-toolkit";
+import { EXPLOITDB_DATASET_BASE64 } from "./exploitdb-dataset";
 
 const ALLOWED_USERNAMES = new Set<string>([
 	// Add GitHub usernames of users who should have access to the image generation tool
 	// For example: 'yourusername', 'coworkerusername'
+	'whobcode'
 ]);
 
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
@@ -26,6 +22,22 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	});
 
 	async init() {
+		// Load ExploitDB dataset if available
+		if (EXPLOITDB_DATASET_BASE64 && !isDatasetLoaded()) {
+			try {
+				await loadDataset(EXPLOITDB_DATASET_BASE64);
+				console.log("ExploitDB dataset loaded successfully");
+			} catch (error) {
+				console.error("Failed to load ExploitDB dataset:", error);
+			}
+		}
+
+		// Register external API tools (security research, OSINT, vulnerability intelligence)
+		registerExternalApiTools(this.server, this.env);
+
+		// Register ExploitDB tools
+		registerExploitDbTools(this.server);
+
 		// Hello, world!
 		this.server.tool(
 			"add",
@@ -42,21 +54,34 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 			"Get user info from GitHub, via Octokit",
 			{},
 			async () => {
-				const octokit = new Octokit({ auth: this.props!.accessToken });
-				return {
-					content: [
-						{
-							text: JSON.stringify(await octokit.rest.users.getAuthenticated()),
-							type: "text",
-						},
-					],
-				};
+				if (!this.props?.accessToken) {
+					return {
+						content: [{ text: "Error: Not authenticated. Please authenticate with GitHub first.", type: "text" }],
+						isError: true,
+					};
+				}
+				try {
+					const octokit = new Octokit({ auth: this.props.accessToken });
+					return {
+						content: [
+							{
+								text: JSON.stringify(await octokit.rest.users.getAuthenticated()),
+								type: "text",
+							},
+						],
+					};
+				} catch (error: any) {
+					return {
+						content: [{ text: `Error fetching user info: ${error.message}`, type: "text" }],
+						isError: true,
+					};
+				}
 			},
 		);
 
 		// Dynamically add tools based on the user's login. In this case, I want to limit
 		// access to my Image Generation tool to just me
-		if (ALLOWED_USERNAMES.has(this.props!.login)) {
+		if (this.props?.login && ALLOWED_USERNAMES.has(this.props.login)) {
 			this.server.tool(
 				"generateImage",
 				"Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
@@ -74,14 +99,28 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 						),
 				},
 				async ({ prompt, steps }) => {
-					const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
-						prompt,
-						steps,
-					});
+					try {
+						const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+							prompt,
+							steps,
+						});
 
-					return {
-						content: [{ data: response.image!, mimeType: "image/jpeg", type: "image" }],
-					};
+						if (!response.image) {
+							return {
+								content: [{ text: "Error: AI model failed to generate an image.", type: "text" }],
+								isError: true,
+							};
+						}
+
+						return {
+							content: [{ data: response.image, mimeType: "image/jpeg", type: "image" }],
+						};
+					} catch (error: any) {
+						return {
+							content: [{ text: `Error generating image: ${error.message}`, type: "text" }],
+							isError: true,
+						};
+					}
 				},
 			);
 		}
