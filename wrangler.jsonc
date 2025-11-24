@@ -10,7 +10,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "my-mcp-server-github-auth",
 	"main": "src/index.ts",
-	"compatibility_date": "2025-03-10",
+	"compatibility_date": "2025-09-17",
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
@@ -57,6 +57,9 @@
 	],
 	"ai": {
 		"binding": "AI"
+	},
+	"browser": {
+		"binding": "BROWSER"
 	},
 	"observability": {
 		"enabled": true

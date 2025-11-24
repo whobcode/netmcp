@@ -90,7 +90,10 @@ app.post("/authorize", async (c) => {
 		headers.append("Set-Cookie", approvedClientCookie);
 		headers.append("Set-Cookie", sessionBindingCookie);
 
-		return redirectToGithub(c.req.raw, stateToken, Object.fromEntries(headers));
+		// Build headers object for redirect - using Array.from for DOM/Workers Headers compatibility
+		const headerEntries: [string, string][] = [];
+		headers.forEach((value, key) => headerEntries.push([key, value]));
+		return redirectToGithub(c.req.raw, stateToken, Object.fromEntries(headerEntries));
 	} catch (error: any) {
 		console.error("POST /authorize error:", error);
 		if (error instanceof OAuthError) {

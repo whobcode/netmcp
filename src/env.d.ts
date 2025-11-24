@@ -6,6 +6,9 @@ declare namespace Cloudflare {
     // Required secrets (set via wrangler secret put)
     COOKIE_ENCRYPTION_KEY: string;
 
+    // Browser Rendering binding (configured in wrangler.jsonc)
+    BROWSER: Fetcher;
+
     // External API tool secrets (all optional)
     NVD_API_KEY?: string;
     GITHUB_TOKEN?: string;

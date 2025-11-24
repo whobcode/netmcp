@@ -8,6 +8,7 @@ import type { Props } from "./utils";
 import { registerExternalApiTools } from "./external-api-tools";
 import { registerExploitDbTools, loadDataset, isDatasetLoaded } from "./exploitdb-toolkit";
 import { EXPLOITDB_DATASET_BASE64 } from "./exploitdb-dataset";
+import { registerBrowserTools } from "./browser-tools";
 
 const ALLOWED_USERNAMES = new Set<string>([
 	// Add GitHub usernames of users who should have access to the image generation tool
@@ -37,6 +38,9 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 
 		// Register ExploitDB tools
 		registerExploitDbTools(this.server);
+
+		// Register browser automation tools (Playwright)
+		registerBrowserTools(this.server, this.env.BROWSER);
 
 		// Hello, world!
 		this.server.tool(
