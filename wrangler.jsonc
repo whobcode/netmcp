@@ -1,14 +1,6 @@
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "my-mcp-server-github-auth",
+	"name": "netmcp",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-09-17",
 	"compatibility_flags": [
@@ -62,7 +54,19 @@
 		"binding": "BROWSER"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+		  "enabled": true,
+		  "head_sampling_rate": 1,
+		  "persist": true,
+		  "invocation_logs": true
+		},
+		"traces": {
+		  "enabled": true,
+		  "persist": true,
+		  "head_sampling_rate": 1
+		}
 	},
 	/**
 	 * Smart Placement
@@ -96,5 +100,15 @@
 	// "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
 	"dev": {
 		"port": 8788
-	}
+	},
+	"routes": [
+		{
+			"pattern": "netmcp.hwmnbn.me",
+			"custom_domain": true
+		},
+		{
+			"pattern": "*.netmcp.hwmnbn.me/*",
+			"zone_id": "ff94bb317bdc9cf828f8821b5ded355d"
+		}
+	]
 }
