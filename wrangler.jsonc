@@ -48,10 +48,12 @@
 		}
 	],
 	"ai": {
-		"binding": "AI"
+		"binding": "AI",
+		"remote": true
 	},
 	"browser": {
-		"binding": "BROWSER"
+		"binding": "BROWSER",
+		"remote": true
 	},
 	"observability": {
 		"enabled": true,

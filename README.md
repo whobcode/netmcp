@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server providing security research, OSINT, and vulnerability intelligence tools. Authenticated via GitHub OAuth.
 
-**Server URL:** `https://my-mcp-server-github-auth.tru-bone.workers.dev`
+**Server URL:** `https://netmcp.hwmnbn.me`
 
 ## Tools
 
@@ -59,7 +59,7 @@ Open **Settings → Developer → Edit Config** and add:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://my-mcp-server-github-auth.tru-bone.workers.dev/sse"
+        "https://netmcp.hwmnbn.me/sse"
       ]
     }
   }
@@ -73,7 +73,7 @@ Restart Claude Desktop. A browser window will open for GitHub OAuth authenticati
 Choose **Type**: "Command" and enter:
 
 ```
-npx mcp-remote https://my-mcp-server-github-auth.tru-bone.workers.dev/sse
+npx mcp-remote https://netmcp.hwmnbn.me/sse
 ```
 
 ### Other MCP Clients
@@ -88,7 +88,7 @@ Test the server directly:
 npx @modelcontextprotocol/inspector@latest
 ```
 
-Enter `https://my-mcp-server-github-auth.tru-bone.workers.dev/sse` and connect.
+Enter `https://netmcp.hwmnbn.me/sse` and connect.
 
 ## REST shim for iOS Shortcuts / curl (`/run`)
 

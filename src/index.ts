@@ -68,7 +68,7 @@ export async function ensureToolsBootstrapped(env: Env): Promise<void> {
 
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
-		name: "Github OAuth Proxy Demo",
+		name: "NETMCP",
 		version: "1.0.0",
 	});
 
