@@ -9,12 +9,62 @@ import { registerExternalApiTools } from "./external-api-tools";
 import { registerExploitDbTools, loadDataset, isDatasetLoaded } from "./exploitdb-toolkit";
 import { EXPLOITDB_DATASET_BASE64 } from "./exploitdb-dataset";
 import { registerBrowserTools } from "./browser-tools";
+import { ToolRegistry } from "./tool-registry";
 
 const ALLOWED_USERNAMES = new Set<string>([
 	// Add GitHub usernames of users who should have access to the image generation tool
 	// For example: 'yourusername', 'coworkerusername'
 	'whobcode'
 ]);
+
+// Shared per-isolate registry. Both MyMCP (Durable Object isolate) and the
+// Hono `app` (Worker isolate) construct their own copy at module load,
+// populated lazily on first use. This lets the REST `/run` shim dispatch to
+// the same tool handlers the MCP server uses, even though the two run in
+// different isolates with different module state.
+export const toolRegistry = new ToolRegistry();
+let bootstrapped = false;
+
+/**
+ * Idempotent: registers every plain (non-OAuth) tool into the module-scope
+ * registry. Safe to call from MyMCP.init() and from the /run REST handler.
+ *
+ * ToolRegistry implements .tool() with the same signature McpServer uses, so
+ * the existing register*Tools functions work unchanged. The `as any` casts
+ * just satisfy TS — those functions are typed against McpServer.
+ */
+export async function ensureToolsBootstrapped(env: Env): Promise<void> {
+	if (bootstrapped) return;
+	bootstrapped = true;
+
+	if (EXPLOITDB_DATASET_BASE64 && !isDatasetLoaded()) {
+		try {
+			await loadDataset(EXPLOITDB_DATASET_BASE64);
+			console.log("ExploitDB dataset loaded successfully");
+		} catch (e) {
+			console.error("Failed to load ExploitDB dataset:", e);
+		}
+	}
+
+	// Register external API tools (security research, OSINT, vulnerability intelligence)
+	registerExternalApiTools(toolRegistry as any, env);
+
+	// Register ExploitDB tools
+	registerExploitDbTools(toolRegistry as any);
+
+	// Register browser automation tools (Playwright)
+	registerBrowserTools(toolRegistry as any, env.BROWSER);
+
+	// `add` is trivial enough to also expose via /run for smoke-testing.
+	toolRegistry.tool(
+		"add",
+		"Add two numbers the way only MCP can",
+		{ a: z.number(), b: z.number() },
+		async ({ a, b }) => ({
+			content: [{ text: String((a as number) + (b as number)), type: "text" }],
+		}),
+	);
+}
 
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
@@ -23,36 +73,20 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	});
 
 	async init() {
-		// Load ExploitDB dataset if available
-		if (EXPLOITDB_DATASET_BASE64 && !isDatasetLoaded()) {
-			try {
-				await loadDataset(EXPLOITDB_DATASET_BASE64);
-				console.log("ExploitDB dataset loaded successfully");
-			} catch (error) {
-				console.error("Failed to load ExploitDB dataset:", error);
-			}
+		// Populate the shared registry (idempotent).
+		await ensureToolsBootstrapped(this.env);
+
+		// Mirror every registered tool onto the actual MCP server so /mcp and
+		// /sse clients still see them. The cast keeps the registry's looser
+		// ToolResult/ZodRawShape types compatible with McpServer's stricter
+		// ToolCallback typing — behavior is identical.
+		for (const meta of toolRegistry.list()) {
+			const full = toolRegistry.get(meta.name)!;
+			(this.server.tool as any)(full.name, full.description, full.schema, full.handler);
 		}
 
-		// Register external API tools (security research, OSINT, vulnerability intelligence)
-		registerExternalApiTools(this.server, this.env);
-
-		// Register ExploitDB tools
-		registerExploitDbTools(this.server);
-
-		// Register browser automation tools (Playwright)
-		registerBrowserTools(this.server, this.env.BROWSER);
-
-		// Hello, world!
-		this.server.tool(
-			"add",
-			"Add two numbers the way only MCP can",
-			{ a: z.number(), b: z.number() },
-			async ({ a, b }) => ({
-				content: [{ text: String(a + b), type: "text" }],
-			}),
-		);
-
-		// Use the upstream access token to facilitate tools
+		// OAuth-gated tools stay here — they close over this.props and can't
+		// run through /run (which has no GitHub OAuth context).
 		this.server.tool(
 			"userInfoOctokit",
 			"Get user info from GitHub, via Octokit",

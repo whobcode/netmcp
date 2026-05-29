@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import { Octokit } from "octokit";
+import { z } from "zod";
 import { fetchUpstreamAuthToken, getUpstreamAuthorizeUrl, type Props } from "./utils";
 import {
 	addApprovedClient,
@@ -14,11 +15,124 @@ import {
 	validateCSRFToken,
 	validateOAuthState,
 } from "./workers-oauth-utils";
+import { ensureToolsBootstrapped, toolRegistry } from "./index";
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
+// ─── Shared-secret auth for the /run REST shim ─────────────────────────────
+// Constant-time string compare so the bearer check doesn't leak length/prefix
+// information via timing.
+function timingSafeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) return false;
+	let mismatch = 0;
+	for (let i = 0; i < a.length; i++) {
+		mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return mismatch === 0;
+}
+
+function requireShortcutAuth(c: { req: { header(name: string): string | undefined }; env: Env }):
+	{ ok: true } | { ok: false; status: 401 | 503; body: { error: string } } {
+	const expected = (c.env as { SHORTCUT_SECRET?: string }).SHORTCUT_SECRET;
+	if (!expected) {
+		return { ok: false, status: 503, body: { error: "Server not configured: SHORTCUT_SECRET unset" } };
+	}
+	const header = c.req.header("Authorization") ?? "";
+	const m = header.match(/^Bearer\s+(.+)$/i);
+	if (!m || !timingSafeEqual(m[1], expected)) {
+		return { ok: false, status: 401, body: { error: "Unauthorized" } };
+	}
+	return { ok: true };
+}
+
+// ─── REST shim for iOS Shortcuts / curl / any plain HTTP client ────────────
+// GET  /run         → list available tools (handy when wiring a Shortcut)
+// POST /run         → { "tool": "<name>", "args": { ... } }
+//
+// Auth: Bearer <SHORTCUT_SECRET>. Set with:
+//   npx wrangler secret put SHORTCUT_SECRET
+//
+// This intentionally lives OUTSIDE the OAuthProvider's apiHandlers so it
+// bypasses the MCP/OAuth flow. The MCP endpoints (/sse, /mcp) remain fully
+// OAuth-protected and untouched.
+app.get("/run", async (c) => {
+	const auth = requireShortcutAuth(c);
+	if (!auth.ok) return c.json(auth.body, auth.status);
+
+	await ensureToolsBootstrapped(c.env);
+	return c.json({ tools: toolRegistry.list() });
+});
+
+app.post("/run", async (c) => {
+	const auth = requireShortcutAuth(c);
+	if (!auth.ok) return c.json(auth.body, auth.status);
+
+	await ensureToolsBootstrapped(c.env);
+
+	let body: unknown;
+	try {
+		body = await c.req.json();
+	} catch {
+		return c.json({ error: "Body must be JSON" }, 400);
+	}
+
+	const { tool, args } = (body ?? {}) as { tool?: unknown; args?: unknown };
+	if (typeof tool !== "string") {
+		return c.json({ error: "Missing 'tool' (string) in body" }, 400);
+	}
+	const argObj = (args && typeof args === "object") ? (args as Record<string, unknown>) : {};
+
+	const entry = toolRegistry.get(tool);
+	if (!entry) {
+		return c.json(
+			{ error: `Unknown tool: ${tool}`, available: toolRegistry.list().map((t) => t.name) },
+			404,
+		);
+	}
+
+	const parsed = z.object(entry.schema).safeParse(argObj);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid args", issues: parsed.error.issues }, 400);
+	}
+
+	try {
+		const result = await entry.handler(parsed.data as Record<string, unknown>);
+		// Convenience field: concatenate any text content blocks so a Shortcut
+		// can do `Get Dictionary Value: text` and be done. `raw` carries the
+		// full MCP-shaped result for clients that want images/PDFs/etc.
+		const text = result.content
+			.filter((b): b is { type: "text"; text: string } =>
+				b.type === "text" && typeof (b as { text?: unknown }).text === "string")
+			.map((b) => b.text)
+			.join("\n");
+
+		return c.json({
+			ok: !result.isError,
+			tool,
+			text,
+			raw: result,
+		});
+	} catch (err) {
+		return c.json({ error: (err as Error).message ?? String(err) }, 500);
+	}
+});
+
 app.get("/authorize", async (c) => {
-	const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+	// parseAuthRequest throws (an OAuthError, or something else on malformed
+	// input) when required OAuth params are missing. Without this guard the
+	// throw bubbles out as an opaque HTTP 500. Catch it: OAuthError knows its
+	// own spec-compliant response, anything else is a 400.
+	let oauthReqInfo: AuthRequest;
+	try {
+		oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw);
+	} catch (error) {
+		if (error instanceof OAuthError) {
+			return error.toResponse();
+		}
+		console.error("GET /authorize parseAuthRequest failed:", error);
+		return c.text("Invalid request", 400);
+	}
+
 	const { clientId } = oauthReqInfo;
 	if (!clientId) {
 		return c.text("Invalid request", 400);

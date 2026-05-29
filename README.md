@@ -90,6 +90,65 @@ npx @modelcontextprotocol/inspector@latest
 
 Enter `https://my-mcp-server-github-auth.tru-bone.workers.dev/sse` and connect.
 
+## REST shim for iOS Shortcuts / curl (`/run`)
+
+For clients that can't speak the MCP protocol (iOS Shortcuts, simple webhooks,
+quick `curl` testing), this server exposes a thin REST endpoint at `/run` that
+wraps the same tool handlers. It lives outside the OAuth-protected MCP paths
+(`/sse`, `/mcp`), which are unchanged.
+
+**Auth:** Single shared-secret bearer token. Set it once:
+
+```bash
+npx wrangler secret put SHORTCUT_SECRET
+# paste a random string — e.g. `openssl rand -hex 32`
+```
+
+**Endpoints**
+
+- `GET /run` — list available tools
+- `POST /run` — run a tool. Body: `{ "tool": "<name>", "args": { ... } }`
+
+The args are validated against the tool's existing Zod schema. The OAuth-gated
+tools (`userInfoOctokit`, `generateImage`) are intentionally **not** exposed here.
+
+**Example: Shodan search via curl**
+
+```bash
+curl -X POST https://netmcp.hwmnbn.me/run \
+  -H "Authorization: Bearer $SHORTCUT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"shodan_device_search","args":{"query":"port:22 country:US","limit":5}}'
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "tool": "shodan_device_search",
+  "text": "### Shodan Search Results\n\nFound ...",
+  "raw": { "content": [], "isError": false }
+}
+```
+
+**iOS Shortcuts wiring**
+
+One "Get Contents of URL" action is enough:
+
+- **URL:** `https://netmcp.hwmnbn.me/run`
+- **Method:** POST
+- **Headers:**
+  - `Authorization: Bearer <your SHORTCUT_SECRET>`
+  - `Content-Type: application/json`
+- **Request Body** (JSON):
+
+  ```json
+  {"tool":"ipwhois_enrichment","args":{"ip":"Shortcut Input"}}
+  ```
+
+Pipe it into a "Get Dictionary Value" → key `text` → "Show Result".
+
 ## Example Usage
 
 Once connected, you can ask your AI assistant:
