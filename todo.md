@@ -156,6 +156,11 @@ All tools below are callable over `/run` **except** `userInfoOctokit` and
 `generateImage`, which require GitHub OAuth context and are only available over
 `/sse` and `/mcp`. `?` marks optional args.
 
+Every data tool also accepts an optional `response_format?` (`"markdown"` default
+| `"json"`) and returns machine-readable `structuredContent` over MCP — omitted
+from the arg tables below for brevity. Binary tools (`browser_screenshot`,
+`browser_pdf`) return image/PDF content instead.
+
 ### Vulnerability intelligence
 | Tool | Args | Notes |
 |------|------|-------|
@@ -213,8 +218,10 @@ the tools without speaking MCP. Auth is a single bearer token (`SHORTCUT_SECRET`
 
 - `GET /run` → lists available tools (handy while wiring a Shortcut).
 - `POST /run` → body `{ "tool": "<name>", "args": { ... } }`. Args are validated
-  against the tool's Zod schema. Response: `{ ok, tool, text, raw }` — `text` is the
-  concatenated text output (use this in Shortcuts); `raw` is the full MCP result.
+  against the tool's Zod `inputSchema` with `.strict()` (unknown fields → `400`).
+  Response: `{ ok, tool, text, raw }` — `text` is the concatenated text output (use
+  this in Shortcuts); `raw` is the full MCP result, including `structuredContent`.
+  Add `"response_format":"json"` to any data tool's `args` to get JSON in `text`.
 
 ### Minimal Shortcut (one action)
 
@@ -276,3 +283,39 @@ curl -X POST https://netmcp.hwmnbn.me/run \
 Tip: for tools that return images/PDFs (`browser_screenshot`, `browser_pdf`,
 `generateImage` via MCP), read the `raw.content` array instead of `text` — the
 base64 payload lives there.
+
+---
+
+## 7. MCP best-practices pass (applied)
+
+Aligns the tools with the MCP TypeScript best-practices guide. Shared logic lives
+in `src/tool-helpers.ts`; `ToolRegistry` mirrors the modern API so `/run` stays in
+sync.
+
+- [x] **Modern `registerTool()` API.** Every tool migrated off the deprecated
+  `server.tool()` to `registerTool(name, { title, description, inputSchema,
+  annotations }, handler)`.
+- [x] **Annotations** on every tool (`readOnlyHint` / `destructiveHint` /
+  `idempotentHint` / `openWorldHint`). Searches/lookups are read-only + open-world;
+  bundled ExploitDB tools are read-only + `openWorldHint:false`; `browser_fill_form`,
+  `browser_click`, `browser_execute_script` are non-read-only; `generateImage` is a
+  non-destructive open-world write.
+- [x] **Dual response formats.** Shared `response_format` ('markdown' | 'json')
+  field + `structuredContent` on all data tools.
+- [x] **Truncation.** `CHARACTER_LIMIT` (25,000) enforced by `formatToolResult()`.
+- [x] **`.strict()` validation** on the `/run` shim. Note: the MCP transport itself
+  validates via the SDK's `z.object(inputSchema)`, which *strips* unknown keys rather
+  than erroring — a raw `ZodRawShape` can't express `.strict()`, so strict
+  enforcement lives in the shim.
+- [x] **Actionable errors.** `describeError()` maps 401/403/404/429 to specific
+  hints; tools report errors in-band (`isError: true`), never thrown.
+
+Remaining / optional (not done this pass):
+
+- [ ] **Tests.** No `test` script or test files yet — add functional tests (e.g.
+  vitest) for the `parse*` helpers in `external-api-tools.ts`.
+- [ ] **Tool-name conventions.** `userInfoOctokit` and `generateImage` are still
+  camelCase and `add` is unprefixed. Renaming is a breaking change for existing
+  clients, so left as-is — rename to e.g. `github_get_user_info`,
+  `flux_generate_image` when you're willing to break the contract.
+- [ ] **Package name** `netmcp` vs the `{service}-mcp-server` convention — cosmetic.

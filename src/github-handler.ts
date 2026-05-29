@@ -90,7 +90,10 @@ app.post("/run", async (c) => {
 		);
 	}
 
-	const parsed = z.object(entry.schema).safeParse(argObj);
+	// Validate against the tool's Zod inputSchema. .strict() rejects unknown
+	// fields so typos surface as errors instead of being silently dropped.
+	const shape = entry.config.inputSchema ?? {};
+	const parsed = z.object(shape).strict().safeParse(argObj);
 	if (!parsed.success) {
 		return c.json({ error: "Invalid args", issues: parsed.error.issues }, 400);
 	}

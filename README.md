@@ -1,4 +1,4 @@
-# Security Research MCP Server
+# NETMCP — Security Research MCP Server
 
 A Model Context Protocol (MCP) server providing security research, OSINT, and vulnerability intelligence tools. Authenticated via GitHub OAuth.
 
@@ -45,6 +45,31 @@ A Model Context Protocol (MCP) server providing security research, OSINT, and vu
 | `add` | Add two numbers |
 | `userInfoOctokit` | Get authenticated GitHub user info |
 | `generateImage` | Generate images with Flux AI (restricted access) |
+
+## Response formats, structured output & annotations
+
+Every data tool follows a few shared conventions (implemented once in
+`src/tool-helpers.ts`):
+
+- **Dual output via `response_format`.** Pass `response_format: "markdown"`
+  (default, human-readable) or `"json"` (machine-readable). Over MCP the
+  structured object is *also* returned in the `structuredContent` field
+  regardless of `response_format`.
+- **Truncation.** Text output is capped at `CHARACTER_LIMIT` (25,000 chars) with
+  a note telling you to narrow the query or use `limit`/`offset`.
+- **Annotations.** Each tool carries MCP annotations so clients can reason about
+  it: the searches/lookups are `readOnlyHint: true, openWorldHint: true`; the
+  bundled ExploitDB tools are read-only with `openWorldHint: false`;
+  `browser_fill_form`, `browser_click`, and `browser_execute_script` are **not**
+  read-only; `generateImage` is a non-destructive open-world write.
+- **Errors** are reported in-band (`isError: true`) with status-mapped, actionable
+  messages (401/403/404/429 each map to a specific hint) — never thrown as
+  protocol-level errors.
+
+Tools are registered with the modern `registerTool(name, config, handler)` API
+(title + description + `inputSchema` + annotations). Browser tools that return
+images/PDFs (`browser_screenshot`, `browser_pdf`) emit binary content instead of
+`response_format` text.
 
 ## Connecting to the Server
 
@@ -109,8 +134,11 @@ npx wrangler secret put SHORTCUT_SECRET
 - `GET /run` — list available tools
 - `POST /run` — run a tool. Body: `{ "tool": "<name>", "args": { ... } }`
 
-The args are validated against the tool's existing Zod schema. The OAuth-gated
-tools (`userInfoOctokit`, `generateImage`) are intentionally **not** exposed here.
+The args are validated against the tool's Zod `inputSchema` with `.strict()` —
+unknown fields are rejected, so a typo returns a `400` instead of being silently
+dropped. Most data tools also accept an optional `"response_format"` arg
+(`"markdown"` default, or `"json"`). The OAuth-gated tools (`userInfoOctokit`,
+`generateImage`) are intentionally **not** exposed here.
 
 **Example: Shodan search via curl**
 
@@ -128,8 +156,17 @@ Response:
   "ok": true,
   "tool": "shodan_device_search",
   "text": "### Shodan Search Results\n\nFound ...",
-  "raw": { "content": [], "isError": false }
+  "raw": { "content": [], "isError": false, "structuredContent": {} }
 }
+```
+
+**Machine-readable JSON instead of Markdown** — add `response_format: "json"`:
+
+```bash
+curl -X POST https://netmcp.hwmnbn.me/run \
+  -H "Authorization: Bearer $SHORTCUT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"nvd_cve_lookup","args":{"cveId":"CVE-2024-3094","response_format":"json"}}'
 ```
 
 **iOS Shortcuts wiring**

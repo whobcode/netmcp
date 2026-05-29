@@ -4,11 +4,11 @@
 // REST `/run` shim (used by iOS Shortcuts and any other plain HTTP client)
 // can dispatch to them without going through the MCP/OAuth handshake.
 //
-// The class duck-types the subset of `McpServer` that the various
-// `register*Tools(server, ...)` functions in this repo actually use —
-// just `.tool(name, description, schema, handler)`. That means we can
-// pass a `ToolRegistry` anywhere an `McpServer` is expected without
-// changing the tool registration files.
+// It mirrors the MODERN `McpServer.registerTool(name, config, handler)` API
+// (config object with title/description/inputSchema/annotations). Both the
+// real McpServer (inside MyMCP) and this registry satisfy the `ToolHost`
+// interface, so the `register*Tools(host, ...)` functions are written once
+// against `ToolHost` and work with either target.
 
 import type { ZodRawShape } from "zod";
 
@@ -20,69 +20,68 @@ export type ToolContent =
 export type ToolResult = {
   content: ToolContent[];
   isError?: boolean;
+  structuredContent?: Record<string, unknown>;
 };
 
-export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
+export type ToolHandler = (args: Record<string, any>) => Promise<ToolResult> | ToolResult;
+
+/** MCP tool annotations (hints clients use to reason about tool behavior). */
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+/** Config object passed to registerTool — matches the modern SDK shape. */
+export interface ToolConfig {
+  title?: string;
+  description: string;
+  inputSchema?: ZodRawShape;
+  outputSchema?: ZodRawShape;
+  annotations?: ToolAnnotations;
+}
 
 export interface RegisteredTool {
   name: string;
-  description: string;
-  schema: ZodRawShape;
+  config: ToolConfig;
   handler: ToolHandler;
 }
 
-export class ToolRegistry {
+/**
+ * Minimal structural type satisfied by BOTH `McpServer` and `ToolRegistry`.
+ * `register*Tools()` functions accept this so they're decoupled from the
+ * SDK's strict generics while still using the modern registerTool signature.
+ */
+export interface ToolHost {
+  registerTool(name: string, config: ToolConfig, handler: ToolHandler): unknown;
+}
+
+export class ToolRegistry implements ToolHost {
   private tools = new Map<string, RegisteredTool>();
 
   /**
-   * Mirrors `McpServer.tool()` so existing `register*Tools(server, ...)`
-   * functions can be called with a ToolRegistry instead. Last write wins,
-   * matching MCP server behavior.
+   * Mirrors `McpServer.registerTool()`. Last write wins, matching MCP
+   * server behavior.
    */
-  tool(
-    name: string,
-    description: string,
-    schema: ZodRawShape,
-    handler: ToolHandler,
-  ): void {
-    this.tools.set(name, { name, description, schema, handler });
+  registerTool(name: string, config: ToolConfig, handler: ToolHandler): void {
+    this.tools.set(name, { name, config, handler });
   }
 
   get(name: string): RegisteredTool | undefined {
     return this.tools.get(name);
   }
 
-  list(): Array<{ name: string; description: string }> {
+  list(): Array<{ name: string; title?: string; description: string }> {
     return Array.from(this.tools.values()).map((t) => ({
       name: t.name,
-      description: t.description,
+      title: t.config.title,
+      description: t.config.description,
     }));
   }
 
   size(): number {
     return this.tools.size;
   }
-}
-
-/**
- * Wraps a real McpServer so every `.tool()` call is also recorded into
- * the given registry. Use this inside `MyMCP.init()` when you want
- * registrations to fan out to BOTH the MCP server (for /mcp + /sse
- * clients) AND the module-scope registry (for /run).
- */
-export function fanout(
-  server: { tool: (...args: unknown[]) => unknown },
-  registry: ToolRegistry,
-): { tool: ToolRegistry["tool"] } {
-  return {
-    tool(name, description, schema, handler) {
-      registry.tool(name, description, schema, handler);
-      (server.tool as (
-        name: string,
-        description: string,
-        schema: ZodRawShape,
-        handler: ToolHandler,
-      ) => unknown)(name, description, schema, handler);
-    },
-  };
 }
