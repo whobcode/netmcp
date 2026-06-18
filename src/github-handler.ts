@@ -16,8 +16,19 @@ import {
 	validateOAuthState,
 } from "./workers-oauth-utils";
 import { ensureToolsBootstrapped, toolRegistry } from "./index";
+import UI from "./ui.html";
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
+
+// ─── Public landing page + read-only tool catalog ──────────────────────────
+// GET / falls through to this defaultHandler (it isn't an OAuth/MCP route).
+// The catalog exposes only tool metadata (names/descriptions) — no execution.
+app.get("/", (c) => c.html(UI));
+app.get("/api/tools", async (c) => {
+	await ensureToolsBootstrapped(c.env);
+	const tools = toolRegistry.list();
+	return c.json({ endpoint: "/mcp", count: tools.length, tools });
+});
 
 // ─── Shared-secret auth for the /run REST shim ─────────────────────────────
 // Constant-time string compare so the bearer check doesn't leak length/prefix

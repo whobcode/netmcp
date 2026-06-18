@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>netmcp — Security & OSINT MCP server</title>
+<meta name="description" content="An authenticated Model Context Protocol server exposing OSINT, vulnerability-intelligence, ExploitDB and browser-automation tools." />
+<style>
+  :root { --bg:#0a0e17; --panel:#121826; --panel2:#1a2233; --line:#26304180; --text:#e7ecf3; --muted:#8a97ad; --accent:#7c5cff; --accent2:#22d3ee; --green:#34d399; }
+  * { box-sizing:border-box; }
+  body { margin:0; color:var(--text); background:var(--bg); font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; min-height:100vh;
+    background-image: radial-gradient(900px 500px at 80% -10%, #1d1640 0%, transparent 60%), radial-gradient(800px 500px at 10% 0%, #07303a 0%, transparent 55%); }
+  .wrap { max-width:920px; margin:0 auto; padding:40px 20px 90px; }
+  .hero h1 { font-size:40px; margin:0 0 6px; letter-spacing:-.03em; background:linear-gradient(90deg,#fff, #b9a8ff 60%, var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p { color:var(--muted); font-size:17px; max-width:620px; margin:0 0 20px; }
+  .pill { display:inline-flex; gap:8px; align-items:center; background:#ffffff0d; border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--muted); margin-right:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; margin:18px 0; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 12px; }
+  .endpoint { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .epbox { flex:1; min-width:240px; background:#05080f; border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:14px; color:var(--accent2); overflow:auto; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:10px 16px; font-weight:600; cursor:pointer; font-size:14px; }
+  button:hover { filter:brightness(1.1); } button.copy { background:var(--panel2); border:1px solid var(--line); color:var(--text); }
+  pre.snip { background:#05080f; border:1px solid var(--line); border-radius:10px; padding:14px; overflow:auto; font-size:13px; color:#cbd5e1; }
+  .tools { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .tool { background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:12px 14px; }
+  .tool .n { font-weight:700; font-family:ui-monospace,monospace; color:#fff; font-size:13px; }
+  .tool .d { color:var(--muted); font-size:12.5px; margin-top:4px; }
+  .count { color:var(--accent2); font-weight:700; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  .feat { background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:14px; }
+  .feat b { display:block; margin-bottom:4px; }
+  a { color:var(--accent2); text-decoration:none; } a:hover { text-decoration:underline; }
+  .muted { color:var(--muted); } .foot { color:var(--muted); font-size:13px; margin-top:26px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <h1>netmcp</h1>
+    <p>An authenticated <strong>Model Context Protocol</strong> server — gives AI agents a toolbox of OSINT, vulnerability-intelligence, ExploitDB search and headless-browser capabilities.</p>
+    <span class="pill"><span class="dot"></span> operational</span>
+    <span class="pill">GitHub OAuth protected</span>
+    <span class="pill">Streamable-HTTP + SSE</span>
+  </div>
+
+  <div class="card">
+    <h2>MCP endpoint</h2>
+    <div class="endpoint">
+      <div class="epbox" id="ep">https://netmcp.hwmnbn.me/mcp</div>
+      <button class="copy" id="copyBtn">Copy</button>
+    </div>
+    <p class="muted" style="margin:12px 0 0;">Connecting triggers a one-time GitHub OAuth approval. The legacy SSE transport is at <code>/sse</code>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Add to an MCP client</h2>
+    <pre class="snip" id="snip">{
+  "mcpServers": {
+    "netmcp": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://netmcp.hwmnbn.me/mcp"]
+    }
+  }
+}</pre>
+    <p class="muted" style="margin:10px 0 0;">Works with Claude Desktop / Code, Cursor, and any MCP-compatible client.</p>
+  </div>
+
+  <div class="card">
+    <h2>Capabilities</h2>
+    <div class="grid2">
+      <div class="feat"><b>🔎 OSINT &amp; recon</b><span class="muted">Host/IP intelligence, DNS history, search & enrichment across external providers.</span></div>
+      <div class="feat"><b>🛡️ Vulnerability intel</b><span class="muted">CVE lookup, OSV scanning and vulnerability research helpers.</span></div>
+      <div class="feat"><b>💥 ExploitDB</b><span class="muted">Search and retrieve exploits from a bundled ExploitDB dataset.</span></div>
+      <div class="feat"><b>🌐 Browser automation</b><span class="muted">Headless-browser navigation, scraping, screenshots & PDF via Playwright.</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Available tools <span class="count" id="toolCount"></span></h2>
+    <div class="tools" id="tools"><span class="muted">Loading tool catalog…</span></div>
+  </div>
+
+  <div class="foot">
+    Source: <a href="https://github.com/whobcode/netmcp">github.com/whobcode/netmcp</a> · MCP tools are OAuth-gated; this page is public, read-only metadata.
+  </div>
+</div>
+
+<script>
+const ep = "https://netmcp.hwmnbn.me/mcp";
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(ep); const b=document.getElementById("copyBtn"); b.textContent="Copied!"; setTimeout(()=>b.textContent="Copy",1500); } catch(e){}
+});
+(async () => {
+  try {
+    const r = await fetch("/api/tools");
+    const d = await r.json();
+    const tools = d.tools || [];
+    document.getElementById("toolCount").textContent = tools.length ? "(" + tools.length + ")" : "";
+    if (!tools.length) { document.getElementById("tools").innerHTML = '<span class="muted">Tool catalog unavailable.</span>'; return; }
+    tools.sort((a,b)=> a.name.localeCompare(b.name));
+    document.getElementById("tools").innerHTML = tools.map((t) => {
+      const n = (t.title || t.name).replace(/</g,"&lt;");
+      const d2 = (t.description || "").replace(/</g,"&lt;");
+      return '<div class="tool"><div class="n">' + n + '</div><div class="d">' + d2 + '</div></div>';
+    }).join("");
+  } catch (e) {
+    document.getElementById("tools").innerHTML = '<span class="muted">Tool catalog unavailable.</span>';
+  }
+})();
+</script>
+</body>
+</html>

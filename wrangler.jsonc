@@ -112,5 +112,8 @@
 			"pattern": "*.netmcp.hwmnbn.me/*",
 			"zone_id": "ff94bb317bdc9cf828f8821b5ded355d"
 		}
+	],
+	"rules": [
+		{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }
 	]
 }
